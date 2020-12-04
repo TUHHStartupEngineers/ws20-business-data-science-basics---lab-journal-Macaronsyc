@@ -89,3 +89,282 @@ sales_by_year_cat_1_tbl %>%
     fill = "Main states" # Changes the legend name
   )
 ```
+
+
+
+# My second challenge_API_Request
+
+```{r}
+
+library(httr)
+library(jsonlite)
+alphavantage_api_url <- "http://api.weatherapi.com/v1/current.json"
+res <- GET(alphavantage_api_url, query = list(
+  key = Sys.getenv("WEATHER_KEY"),
+  q = "Shanghai"
+))
+
+list <- rawToChar(res$content) %>% fromJSON()
+list
+
+
+```
+
+
+# My second challenge_Web_Scrape_Rose
+
+```{r calculation1, eval=FALSE}
+
+library(tidyverse) # Main Package - Loads dplyr, purrr, etc.
+library(rvest)     # HTML Hacking & Web Scraping
+library(xopen)     # Quickly opening URLs
+library(jsonlite)  # converts JSON files to R objects
+library(glue)      # concatenate strings
+library(stringi)   # character string/text processing
+
+
+url_home <- "https://www.rosebikes.de/fahrr%C3%A4der"
+html_home <- read_html(url_home)
+bike_family_tbl <- html_home %>%
+  html_nodes(css = ".catalog-navigation__list-item > a") %>%
+  html_attr('href') %>%
+  discard(.p = ~stringr::str_detect(.x,"sale|zoovu")) %>%
+  enframe(name = "position", value = "family_url") %>%
+  mutate(family_url = str_glue("https://www.rosebikes.de{family_url}"))
+
+
+
+get_bike_data <- function(url){
+  
+  html_bike_family  <- read_html(url)
+  rosebike_model_tbl <- html_bike_family %>%
+    html_nodes(css = ".catalog-category-bikes__list-item > div > div > .catalog-category-bikes__title > span") %>%
+    html_text() %>% 
+    str_replace_all(pattern = "\\n", "") %>% 
+    # html_attr('href') %>%
+    # tail(-1) %>% 
+    enframe(name = "position", value = "Model")
+  
+  rosebike_cate_tbl <- html_bike_family %>%
+    html_nodes(css = ".catalog-category-bikes__list-item > div > a") %>%
+    html_attr('href') %>% 
+    str_remove(pattern = "/fahrräder/") %>% 
+    str_remove(pattern = "/.*") %>% 
+    enframe(name = "position", value = "Category")
+  
+  
+  
+  rosebike_price_tbl <- html_bike_family %>%
+    html_nodes(css = ".catalog-category-bikes__list-item > div > div > .catalog-category-bikes__price > .catalog-category-bikes__price-title") %>%
+    html_text() %>% 
+    str_replace_all(pattern = "\\n", "") %>%
+    enframe(name = "position", value = "Price")
+    
+    # rowid_to_column(var='position') %>%
+  res <- left_join(rosebike_model_tbl, rosebike_price_tbl) %>% 
+    left_join(rosebike_cate_tbl)
+  
+}
+
+
+Rosebike_model_tbl <- tibble()
+# tempres <- get_bike_data(bike_family_tbl$family_url[1])
+
+
+for (i in seq_along(bike_family_tbl$family_url)) {
+
+  bike_family_url <- bike_family_tbl$family_url[i]
+  Rosebike_model_tbl     <- bind_rows(Rosebike_model_tbl, get_bike_data(bike_family_url))
+
+  # Wait between each request to reduce the load on the server
+  # Otherwise we could get blocked
+  Sys.sleep(1)
+
+  # print the progress
+  print(i)
+
+}
+
+Rosebike_model_tbl
+saveRDS(Rosebike_model_tbl, "bike_data_tbl.rds")
+
+
+```
+
+```{r}
+library(readr)
+res <- read_rds("bike_data_tbl.rds")
+res
+```
+
+
+# My third challenge_data_wrangling
+```{R calculation2, eval=FALSE}
+library(tidyverse)
+library(vroom)
+# Data Table
+library(data.table)
+# Counter
+library(tictoc)
+
+col_types_patent <- list(
+  id = col_character(),
+  type = col_character(),
+  number = col_character(),
+  country = col_character(),
+  date = col_date("%Y-%m-%d"),
+  abstract = col_character(),
+  title = col_character(),
+  kind = col_character(),
+  num_claims = col_double(),
+  filename = col_character(),
+  withdrawn = col_double()
+)
+
+col_types_assignee <- list(
+  id = col_character(),
+  type = col_character(),
+  name_first = col_character(),
+  name_last = col_character(),
+  organization = col_character()
+)
+
+
+col_types_patent_assignee <- list(
+  patent_id = col_character(),
+  assignee_id = col_character(),
+  location_id = col_character()
+)
+
+
+col_types_uspc <- list(
+  uuid = col_character(),
+  patent_id = col_character(),
+  main_class_id = col_character(),
+  subclass_id = col_character(),
+  sequence = col_integer()
+)
+
+# import assignee
+assignee_tbl <- vroom(
+  file       = "assignee.tsv", 
+  delim      = "\t", 
+  col_types  = col_types_assignee,
+  na         = c("", "NA", "NULL")
+)
+# import patent assignee
+patent_assignee_tbl <- vroom(
+  file       = "patent_assignee.tsv", 
+  delim      = "\t", 
+  col_types  = col_types_patent_assignee,
+  na         = c("", "NA", "NULL")
+)
+
+# import patent
+patent_tbl <- vroom(
+  file       = "patent.tsv", 
+  delim      = "\t", 
+  col_types  = col_types_patent,
+  na         = c("", "NA", "NULL")
+)
+
+# import uspc
+uspc_tbl <- vroom(
+  file       = "uspc.tsv", 
+  delim      = "\t", 
+  col_types  = col_types_uspc,
+  na         = c("", "NA", "NULL")
+)
+
+
+# First question
+joined_tbl_1 <- patent_assignee_tbl %>%
+  left_join(y = assignee_tbl, by = c("assignee_id" = "id")) %>%
+  filter(!is.na(organization)) %>%
+  filter(type == "2") %>%
+  group_by(organization) %>%
+  summarise(
+    count = n()
+  ) %>%
+  ungroup() %>%
+  arrange(desc(count))
+saveRDS(joined_tbl_1, "first.rds") 
+
+```
+
+```{r}
+library(readr)
+res1 <- read_rds("first.rds")
+res1
+
+```
+
+
+```{r calculation3, eval=FALSE}
+# Second question
+joined_tbl_2 <- patent_assignee_tbl %>%
+  left_join(y = assignee_tbl, by = c("assignee_id" = "id")) %>%
+  left_join(y = patent_tbl %>% select(id,date), by = c("patent_id" = "id")) %>%
+  filter(!is.na(organization)) %>%
+  filter(type == 2) %>%
+  filter(year(date) == "2019") %>%
+  group_by(organization) %>%
+  summarise(
+    count = n()
+  ) %>%
+  ungroup() %>%
+  arrange(desc(count))
+saveRDS(joined_tbl_2, "second.rds") 
+
+
+```
+
+```{r}
+library(readr)
+res2 <- read_rds("second.rds")
+res2
+
+```
+
+```{r calculation4, eval=FALSE}
+# Third question
+top_10 <- patent_assignee_tbl %>%
+  left_join(y = assignee_tbl, by = c("assignee_id" = "id")) %>%
+  filter(!is.na(organization)) %>%
+  filter((type == 2) | (type == 3)) %>%
+  group_by(organization) %>%
+  summarise(
+    count = n()
+  ) %>%
+  ungroup() %>%
+  arrange(desc(count)) %>% 
+  slice(1:10) %>% 
+  pull(organization)
+top_10
+
+
+joined_tbl_3 <- patent_assignee_tbl %>%
+  left_join(y = assignee_tbl, by = c("assignee_id" = "id")) %>%
+  left_join(y = uspc_tbl %>% filter(sequence == 0) %>% select(patent_id,mainclass_id) , by = c("patent_id" = "patent_id")) %>%
+  
+  filter(!is.na(organization)) %>%
+  filter(organization %in% top_10) %>% 
+  group_by(mainclass_id) %>%
+  summarise(
+    count = n()
+  ) %>%
+  ungroup() %>%
+  arrange(desc(count)) %>% 
+  filter(!is.na(mainclass_id)) %>% 
+  slice(1:5)
+saveRDS(joined_tbl_3, "third.rds") 
+
+```
+
+
+```{r}
+library(readr)
+res3 <- read_rds("third.rds")
+res3
+
+```
