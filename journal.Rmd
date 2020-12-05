@@ -111,7 +111,7 @@ list
 ```
 
 
-# My second challenge_Web_Scrape_Rose
+# My second challenge_Web_Scrape
 
 ```{r calculation1, eval=FALSE}
 
@@ -366,5 +366,134 @@ saveRDS(joined_tbl_3, "third.rds")
 library(readr)
 res3 <- read_rds("third.rds")
 res3
+
+```
+
+
+# My fourth challenge_covid_19
+
+```{R}
+
+library(tidyverse)
+covid_data_tbl <- read_csv("https://opendata.ecdc.europa.eu/covid19/casedistribution/csv")
+
+# Countries to demonstrate
+countries <- c("United_Kingdom", "Germany", "France", "Spain", "United_States_of_America")
+France <- covid_data_tbl %>% 
+  select(countriesAndTerritories, cases, day, month, year) %>% 
+  filter(countriesAndTerritories == "France") %>%
+  unite(date_united, year, month, day, sep = "-", remove = TRUE) %>%
+  mutate(date_united = as.Date(date_united)) %>% 
+  arrange(date_united) %>% 
+  mutate(cum_sum = cumsum(cases))
+
+France
+
+Germany <- covid_data_tbl %>% 
+  select(countriesAndTerritories, cases, day, month, year) %>% 
+  filter(countriesAndTerritories == "Germany") %>%
+  unite(date_united, year, month, day, sep = "-", remove = TRUE) %>%
+  mutate(date_united = as.Date(date_united)) %>% 
+  arrange(date_united) %>% 
+  mutate(cum_sum = cumsum(cases))
+
+Germany 
+
+
+United_Kingdom <- covid_data_tbl %>% 
+  select(countriesAndTerritories, cases, day, month, year) %>% 
+  filter(countriesAndTerritories == "United_Kingdom") %>%
+  unite(date_united, year, month, day, sep = "-", remove = TRUE) %>%
+  mutate(date_united = as.Date(date_united)) %>% 
+  arrange(date_united) %>% 
+  mutate(cum_sum = cumsum(cases))
+
+United_Kingdom
+
+
+Spain <- covid_data_tbl %>% 
+  select(countriesAndTerritories, cases, day, month, year) %>% 
+  filter(countriesAndTerritories == "Spain") %>%
+  unite(date_united, year, month, day, sep = "-", remove = TRUE) %>%
+  mutate(date_united = as.Date(date_united)) %>% 
+  arrange(date_united) %>% 
+  mutate(cum_sum = cumsum(cases))
+
+
+United_States_of_America <- covid_data_tbl %>% 
+  select(countriesAndTerritories, cases, day, month, year) %>% 
+  filter(countriesAndTerritories == "United_States_of_America") %>%
+  unite(date_united, year, month, day, sep = "-", remove = TRUE) %>%
+  mutate(date_united = as.Date(date_united)) %>% 
+  arrange(date_united) %>% 
+  mutate(cum_sum = cumsum(cases))
+
+United_States_of_America %>% view()
+
+
+
+United <- France %>% 
+  bind_rows(Germany) %>% 
+  bind_rows(Spain) %>% 
+  bind_rows(United_Kingdom) %>% 
+  bind_rows(United_States_of_America)
+
+United %>% 
+  ggplot(aes(date_united, cum_sum, color = countriesAndTerritories)) +
+  geom_line(size = 0.5, linetype = 1) +
+  scale_y_continuous(labels = scales::dollar_format(scale  = 1/1e6, 
+                                                    prefix = "", 
+                                                    suffix = " M")) +
+  expand_limits(y = 15e6) + 
+  labs(
+    title = "COVID-19 confirmed cases worldwide",
+    subtitle = "As of 11/02/2020, Europe had more cases than the USA",
+    caption = "Continent / Country",
+    x = "Year 2020",
+    y = "Cumulative Cases",
+    color = "countriesAndTerritories" # Legend text
+  )
+```
+
+# My fourth challenge_map
+
+```{r}
+library(tidyverse)
+covid_data_tbl <- read_csv("https://opendata.ecdc.europa.eu/covid19/casedistribution/csv")
+
+with_mor <- covid_data_tbl %>% 
+  select(deaths, countriesAndTerritories, geoId, countryterritoryCode, popData2019) %>% 
+  group_by(countriesAndTerritories) %>% 
+  summarise(total_death = sum(deaths), 
+            mortality = total_death / popData2019,
+            ) %>% 
+  ungroup() %>% 
+  distinct() %>% 
+  # arrange(desc(mortality))%>% 
+  mutate(across(countriesAndTerritories, str_replace_all, "_", " ")) %>%
+  mutate(countriesAndTerritories = case_when(
+    
+    countriesAndTerritories == "United Kingdom" ~ "UK",
+    countriesAndTerritories == "United States of America" ~ "USA",
+    countriesAndTerritories == "Czechia" ~ "Czech Republic",
+    TRUE ~ countriesAndTerritories
+    
+  ))
+with_mor
+
+world <- map_data("world")
+final_tbl <- world %>% 
+  left_join(with_mor, by = c("region" = "countriesAndTerritories"))
+
+
+
+final_tbl %>%
+  ggplot(aes(x = long, y = lat, fill = mortality)) + 
+  geom_map(aes(map_id = region, fill = mortality),map = world) +
+  scale_fill_gradient(low = "white", high = "darkred",
+                      labels = scales::dollar_format(scale  = 100, 
+                                                     prefix = "", 
+                                                     suffix = "%"))
+
 
 ```
